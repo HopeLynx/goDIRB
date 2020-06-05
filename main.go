@@ -55,32 +55,69 @@ func OpenFileList(ch chan string) {
 	}
 }
 
-// TODO Make BinTree
-
-func processUnit() {
-	arr := make([]int, 0)
-	arr = append(arr, 1)
+func processUnit(errorCh chan string, kill chan bool, valid chan string, err int) {
+	errList := make([]string, 0)
+	errKnowledge := 0
+	numTest := 10
+	for true {
+		select {
+		case str := <-errorCh:
+			if gotIdeaErr(len(errList), numTest) {
+				//it will be sending to chan
+				manageErr(str, errKnowledge, valid)
+			} else if len(errList) == numTest-1 {
+				errList = append(errList, str)
+				errKnowledge = LearnAboutErr(errList)
+			} else {
+				errList = append(errList, str)
+			}
+		case <-kill:
+			fmt.Print("SEE YA SON!")
+			return
+		}
+	}
 }
 
 //TODO 404 Manager
-func manageErr(str string, prev []string, err int) []string {
-	if gotIdeaErr(0, 404) {
-
+func manageErr(str string, errKnowledge int, valid chan string) {
+	if !compareErr(errKnowledge, len(str)) {
+		valid <- str
 	}
-
-	return []string{"0", "0"}
 }
 
-// TODO Get idea how 404 looks like for exact called 404 website and Define if 404 was a mistake or page don't exist
-func LearnAboutErr(str string, err int) {}
+//  Get idea how 404 looks like for exact called 404 website and
+//  func if 10 404 pages cross_val_avg_word_count pick avg one
+func LearnAboutErr(strList []string) int {
+	//cross validation or not really
+	ln := len(strList)
+	sum := 0
+	max := -1
+	for i := 0; i < ln; i++ {
+		sum += len(strList[i])
+		if len(strList[i]) > max {
+			max = i
+		}
+	}
 
-// TODO func if 10 404 pages cross_val_avg_word_count pick avg one
+	ln -= 1
+	sum -= len(strList[max])
 
-// TODO func if avg +- 10% count of words  its junk , another way it's legit , if it's junk make it avg with last one
+	return sum / ln
+}
 
-// TODO bool gotIdea404
-func gotIdeaErr(ln int, err int) bool {
-	if ln > 10 {
+// Func if avg +- 15% count of words  its junk , another way it's legit ,
+// If it's legit make it avg with last one ???
+// Define if 404 was a mistake or page don't exist
+func compareErr(errKnowledge int, ln int) bool {
+	if float32(errKnowledge)*1.15 > float32(ln) && float32(errKnowledge)*0.85 < float32(ln) {
+		return true
+	}
+	return false
+}
+
+// bool is Learnt from err
+func gotIdeaErr(ln int, numTest int) bool {
+	if ln > numTest {
 		return true
 	}
 	return false
