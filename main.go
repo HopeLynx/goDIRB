@@ -7,39 +7,64 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path"
 	"strings"
 )
 
 func main() {
-	url := "http://www.phanteks.com/"
-	word := ""
-	MakeRequest(url, word)
-	//arr := make([]int,0)
-	//fmt.Print(arr)
+	url := "http://www.phanteks.com"
+	word := "kek"
+	urlsCh := make(chan string)
+	errorCh := make(chan string)
+	validCh := make(chan string)
+	ParallelCheckWordList(url, url)
+	MakeRequest(urlsCh, "404", errorCh, validCh)
+	fmt.Print(strings.Join([]string{url, word}, "/"))
+
+	//processUnit()
+	//Spin up error processing gofuncs
+	//Spin up request units
+	openFileAndMakeURL(urlsCh, "./wordlists/big.txt", url)
 }
 
-func MakeRequest(url string, word string) {
-	resp, err := http.Get(url)
-	if err != nil {
-		log.Fatalln(err)
+func startWorkers(n int, work func()) {
+	for i := 0; i < n; i++ {
+		//TODO limited workers here
+		go work()
 	}
+}
 
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		log.Fatalln(err)
+// TODO redo with urlchanel
+func MakeRequest(urlCh chan string, errorID string, errorCh chan string, validCh chan string) {
+	for url := range urlCh {
+		resp, err := http.Get(url)
+		if err != nil {
+			log.Fatalln(err)
+		}
+
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			log.Fatalln(err)
+		}
+
+		fmt.Println(errorID, strings.Contains(string(body), errorID))
+		if strings.Contains(string(body), errorID) {
+			errorCh <- string(body)
+		} else {
+			validCh <- string(body)
+		}
 	}
-	fmt.Println(strings.Contains(string(body), "404"))
 }
 
 func ParallelCheckWordList(url string, wordList string) {
 	//	TODO limited gofuncs
 	go func() {
-		MakeRequest(url, wordList)
+		//MakeRequest(url, wordList,"404")
 	}()
 }
 
-func OpenFileList(ch chan string) {
-	file, err := os.Open("/path/to/file.txt")
+func openFileAndMakeURL(urlCh chan string, wordListPath string, baseUrl string) {
+	file, err := os.Open(wordListPath)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -47,7 +72,8 @@ func OpenFileList(ch chan string) {
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
-		fmt.Println(scanner.Text())
+		//fmt.Println(scanner.Text())
+		urlCh <- path.Join(baseUrl, scanner.Text())
 	}
 
 	if err := scanner.Err(); err != nil {
@@ -55,7 +81,7 @@ func OpenFileList(ch chan string) {
 	}
 }
 
-func processUnit(errorCh chan string, kill chan bool, valid chan string, err int) {
+func processUnit(errorCh chan string, kill chan bool, valid chan string, errorID string) {
 	errList := make([]string, 0)
 	errKnowledge := 0
 	numTest := 10
@@ -78,7 +104,7 @@ func processUnit(errorCh chan string, kill chan bool, valid chan string, err int
 	}
 }
 
-//TODO 404 Manager
+//Basic worker
 func manageErr(str string, errKnowledge int, valid chan string) {
 	if !compareErr(errKnowledge, len(str)) {
 		valid <- str
