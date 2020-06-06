@@ -12,32 +12,27 @@ import (
 	"sync"
 )
 
+//	TODO parserUnit
 func main() {
+	//DEBUG VARS
 	url := "http://www.phanteks.com"
 	word := "kek"
 	urlsCh := make(chan string)
 	errorCh := make(chan string)
 	validCh := make(chan string)
 	killSwitch := make(chan bool)
+	//DEBUG STRING
 	MakeRequest(urlsCh, errorCh, validCh, "404")
+	//DEBUG POINT
 	fmt.Print(strings.Join([]string{url, word}, "/"))
-
-	//Spin up error processing gofuncs
 	//Spin up request units
 	openFileAndMakeURL(urlsCh, "./wordlists/big.txt", url)
+	//Spin up error processing gofuncs
 	processUnit(errorCh, killSwitch, validCh, "404")
 }
 
-//Already realized in processingUnit
-//func startWorkers(n int, work func()) {
-//	for i := 0; i < n; i++ {
-//						    limited workers here
-//go work()
-//							limited gofuncs
-//}
-//}
-
 func MakeRequest(urlCh chan string, errorCh chan string, validCh chan string, errorID string) {
+	//TODO request pool
 	for url := range urlCh {
 		resp, err := http.Get(url)
 		if err != nil {
@@ -58,13 +53,6 @@ func MakeRequest(urlCh chan string, errorCh chan string, validCh chan string, er
 		}
 	}
 }
-
-// just as idea
-//func ParallelCheckWordList(url string, wordList string) {
-//	go func() {
-//MakeRequest(url, wordList,"404")
-//}()
-//}
 
 func openFileAndMakeURL(urlCh chan string, wordListPath string, baseUrl string) {
 	file, err := os.Open(wordListPath)
@@ -97,7 +85,6 @@ func processUnit(errorCh chan string, kill chan bool, valid chan string, errorID
 		select {
 		case str := <-errorCh:
 			if gotIdeaErr(len(errList), numTest) {
-				//it will be sending to chan
 				stringQueue <- str
 			} else if len(errList) == numTest-1 {
 				errList = append(errList, str)
