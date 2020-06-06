@@ -18,22 +18,24 @@ func main() {
 	urlsCh := make(chan string)
 	errorCh := make(chan string)
 	validCh := make(chan string)
+	killSwitch := make(chan bool)
 	MakeRequest(urlsCh, errorCh, validCh, "404")
 	fmt.Print(strings.Join([]string{url, word}, "/"))
 
-	//processUnit()
 	//Spin up error processing gofuncs
 	//Spin up request units
 	openFileAndMakeURL(urlsCh, "./wordlists/big.txt", url)
+	processUnit(errorCh, killSwitch, validCh, "404")
 }
 
-func startWorkers(n int, work func()) {
-	for i := 0; i < n; i++ {
-		//TODO limited workers here
-		go work()
-		//TODO limited gofuncs
-	}
-}
+//Already realized in processingUnit
+//func startWorkers(n int, work func()) {
+//	for i := 0; i < n; i++ {
+//						    limited workers here
+//go work()
+//							limited gofuncs
+//}
+//}
 
 func MakeRequest(urlCh chan string, errorCh chan string, validCh chan string, errorID string) {
 	for url := range urlCh {
