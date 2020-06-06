@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"strings"
+	"sync"
 )
 
 func main() {
@@ -17,8 +18,7 @@ func main() {
 	urlsCh := make(chan string)
 	errorCh := make(chan string)
 	validCh := make(chan string)
-	ParallelCheckWordList(url, url)
-	MakeRequest(urlsCh, "404", errorCh, validCh)
+	MakeRequest(urlsCh, errorCh, validCh, "404")
 	fmt.Print(strings.Join([]string{url, word}, "/"))
 
 	//processUnit()
@@ -31,11 +31,11 @@ func startWorkers(n int, work func()) {
 	for i := 0; i < n; i++ {
 		//TODO limited workers here
 		go work()
+		//TODO limited gofuncs
 	}
 }
 
-// TODO redo with urlchanel
-func MakeRequest(urlCh chan string, errorID string, errorCh chan string, validCh chan string) {
+func MakeRequest(urlCh chan string, errorCh chan string, validCh chan string, errorID string) {
 	for url := range urlCh {
 		resp, err := http.Get(url)
 		if err != nil {
@@ -49,6 +49,7 @@ func MakeRequest(urlCh chan string, errorID string, errorCh chan string, validCh
 
 		fmt.Println(errorID, strings.Contains(string(body), errorID))
 		if strings.Contains(string(body), errorID) {
+			// TODO rework to check different errors
 			errorCh <- string(body)
 		} else {
 			validCh <- string(body)
@@ -56,12 +57,12 @@ func MakeRequest(urlCh chan string, errorID string, errorCh chan string, validCh
 	}
 }
 
-func ParallelCheckWordList(url string, wordList string) {
-	//	TODO limited gofuncs
-	go func() {
-		//MakeRequest(url, wordList,"404")
-	}()
-}
+// just as idea
+//func ParallelCheckWordList(url string, wordList string) {
+//	go func() {
+//MakeRequest(url, wordList,"404")
+//}()
+//}
 
 func openFileAndMakeURL(urlCh chan string, wordListPath string, baseUrl string) {
 	file, err := os.Open(wordListPath)
@@ -83,17 +84,29 @@ func openFileAndMakeURL(urlCh chan string, wordListPath string, baseUrl string) 
 
 func processUnit(errorCh chan string, kill chan bool, valid chan string, errorID string) {
 	errList := make([]string, 0)
+	stringQueue := make(chan string)
 	errKnowledge := 0
 	numTest := 10
+	numManagers := 5
+	var learnt sync.WaitGroup
+	fmt.Print("!*! processing", errorID, "has been just started")
+
 	for true {
 		select {
 		case str := <-errorCh:
 			if gotIdeaErr(len(errList), numTest) {
 				//it will be sending to chan
-				manageErr(str, errKnowledge, valid)
+				stringQueue <- str
 			} else if len(errList) == numTest-1 {
 				errList = append(errList, str)
-				errKnowledge = LearnAboutErr(errList)
+				learnt.Add(1)
+				errKnowledge = LearnAboutErr(errList, &learnt)
+				learnt.Wait()
+				go func() {
+					for i := 0; i < numManagers; i++ {
+						manageErr(stringQueue, errKnowledge, valid, kill)
+					}
+				}()
 			} else {
 				errList = append(errList, str)
 			}
@@ -105,15 +118,23 @@ func processUnit(errorCh chan string, kill chan bool, valid chan string, errorID
 }
 
 //Basic worker
-func manageErr(str string, errKnowledge int, valid chan string) {
-	if !compareErr(errKnowledge, len(str)) {
-		valid <- str
+func manageErr(str chan string, errKnowledge int, valid chan string, kill chan bool) {
+	for true {
+		select {
+		case page := <-str:
+			if !compareErr(errKnowledge, len(page)) {
+				valid <- page
+			}
+		case <-kill:
+			fmt.Print("SEE YA SON!")
+			return
+		}
 	}
 }
 
-//  Get idea how 404 looks like for exact called 404 website and
-//  func if 10 404 pages cross_val_avg_word_count pick avg one
-func LearnAboutErr(strList []string) int {
+// Get idea how 404 looks like for exact called 404 website and
+// Func if 10 404 pages cross_val_avg_word_count pick avg one
+func LearnAboutErr(strList []string, wg *sync.WaitGroup) int {
 	//cross validation or not really
 	ln := len(strList)
 	sum := 0
@@ -127,13 +148,13 @@ func LearnAboutErr(strList []string) int {
 
 	ln -= 1
 	sum -= len(strList[max])
-
+	wg.Done()
 	return sum / ln
 }
 
 // Func if avg +- 15% count of words  its junk , another way it's legit ,
-// If it's legit make it avg with last one ???
 // Define if 404 was a mistake or page don't exist
+// If it's legit make it avg with last one ???
 func compareErr(errKnowledge int, ln int) bool {
 	if float32(errKnowledge)*1.15 > float32(ln) && float32(errKnowledge)*0.85 < float32(ln) {
 		return true
@@ -141,7 +162,7 @@ func compareErr(errKnowledge int, ln int) bool {
 	return false
 }
 
-// bool is Learnt from err
+// Bool is Learnt from err
 func gotIdeaErr(ln int, numTest int) bool {
 	if ln > numTest {
 		return true
