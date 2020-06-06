@@ -13,6 +13,11 @@ import (
 )
 
 //	TODO parserUnit
+//  TODO output
+//  TODO regexp parse and use
+//  TODO kill mechanism
+//  TODO look for waitgroups
+
 func main() {
 	//DEBUG VARS
 	url := "http://www.phanteks.com"
